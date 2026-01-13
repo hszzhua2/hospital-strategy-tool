@@ -1,0 +1,1860 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>医院空间规划 3D CAD 工具 (修复版)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body { margin: 0; overflow: hidden; font-family: 'Inter', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #0f172a; color: #e2e8f0; }
+        #canvas-container { width: 100vw; height: 100vh; display: block; user-select: none; outline: none; }
+        
+        /* Sidebar Containers */
+        .sidebar {
+            position: fixed;
+            top: 16px;
+            bottom: 16px;
+            width: 340px;
+            background: rgba(17, 24, 39, 0.9);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            z-index: 100;
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+        }
+
+        .sidebar.left { left: 16px; }
+        .sidebar.right { right: 16px; }
+
+        .sidebar.collapsed-left { transform: translateX(-360px); }
+        .sidebar.collapsed-right { transform: translateX(360px); }
+
+        /* Toggle Buttons - Made larger and ensuring visibility */
+        .toggle-btn {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 28px;
+            height: 64px;
+            background: #1e293b;
+            border: 1px solid rgba(255,255,255,0.2);
+            color: #94a3b8;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            z-index: -1; 
+            transition: all 0.2s;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+        .toggle-btn:hover { background: #3b82f6; color: white; border-color: #60a5fa; }
+
+        .sidebar.left .toggle-btn {
+            right: -28px;
+            border-radius: 0 12px 12px 0;
+            border-left: none;
+        }
+        .sidebar.right .toggle-btn {
+            left: -28px;
+            border-radius: 12px 0 0 12px;
+            border-right: none;
+        }
+
+        /* Content Areas */
+        .sidebar-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            scrollbar-width: thin;
+            scrollbar-color: #475569 transparent;
+        }
+        .sidebar-content::-webkit-scrollbar { width: 4px; }
+        .sidebar-content::-webkit-scrollbar-track { background: transparent; }
+        .sidebar-content::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+
+        /* Section Separators */
+        .sidebar-divider {
+            height: 1px;
+            background: rgba(255,255,255,0.1);
+            margin: 16px 0;
+        }
+
+        /* View Controls (Top Center - Floating Capsule) */
+        #view-controls {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(15, 23, 42, 0.95);
+            backdrop-filter: blur(8px);
+            padding: 6px 12px;
+            border-radius: 9999px;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            display: flex;
+            gap: 6px;
+            z-index: 110; 
+            pointer-events: auto;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+            align-items: center;
+        }
+
+        /* Dashboard Modal */
+        #analysis-modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(8px);
+            z-index: 2000;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        
+        .dashboard-content {
+            background: #1e293b;
+            width: 100%;
+            max-width: 1100px;
+            max-height: 90vh;
+            border-radius: 16px;
+            padding: 32px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            position: relative;
+            overflow-y: auto;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .close-btn {
+            position: absolute;
+            top: 20px; right: 20px;
+            width: 36px; height: 36px;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.1);
+            border: none;
+            color: #94a3b8;
+            font-size: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            z-index: 10;
+        }
+        .close-btn:hover { background: #ef4444; color: white; transform: rotate(90deg); }
+
+        .chart-container {
+            background: #0f172a;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 24px;
+            border: 1px solid #334155;
+        }
+        
+        /* Table Styles */
+        .data-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            font-size: 13px;
+            color: #cbd5e1;
+        }
+        .data-table th {
+            background-color: #334155;
+            color: #f8fafc;
+            font-weight: 600;
+            padding: 12px 16px;
+            text-align: left;
+            position: sticky;
+            top: 0;
+        }
+        .data-table td {
+            padding: 12px 16px;
+            border-bottom: 1px solid #1e293b;
+            background: #0f172a;
+        }
+        .data-table tr:last-child td { border-bottom: none; }
+        .data-table tr:hover td { background-color: #1e293b; }
+
+        /* Floating Labels */
+        .label-container {
+            position: absolute;
+            top: 0; left: 0;
+            pointer-events: none;
+            width: 100%; height: 100%;
+            overflow: hidden;
+            z-index: 10;
+        }
+        .dept-label {
+            position: absolute;
+            background: rgba(15, 23, 42, 0.85);
+            color: #f1f5f9;
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 600;
+            transform: translate(-50%, -50%);
+            white-space: nowrap;
+            pointer-events: none;
+            user-select: none;
+            border: 1px solid rgba(255,255,255,0.2);
+            backdrop-filter: blur(4px);
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .dept-label .area-tag {
+            font-size: 10px;
+            color: #94a3b8;
+            font-weight: 400;
+            background: rgba(0,0,0,0.3);
+            padding: 1px 4px;
+            border-radius: 4px;
+        }
+
+        .distance-label {
+            position: absolute;
+            background: rgba(255, 255, 255, 0.6);
+            backdrop-filter: blur(6px);
+            color: #0f172a;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 700;
+            transform: translate(-50%, -50%);
+            white-space: nowrap;
+            font-family: 'JetBrains Mono', monospace;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            z-index: 5;
+            pointer-events: auto;
+            border: 1px solid rgba(255, 255, 255, 0.5);
+            transition: opacity 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        /* Selection Box Styles */
+        #selection-box {
+            position: absolute;
+            pointer-events: none;
+            z-index: 9999;
+            display: none;
+        }
+        .selection-mode-window {
+            background-color: rgba(59, 130, 246, 0.15);
+            border: 1px solid #3b82f6;
+        }
+        .selection-mode-crossing {
+            background-color: rgba(34, 197, 94, 0.15);
+            border: 1px dashed #22c55e;
+        }
+
+        /* Form Styles */
+        .form-group { margin-bottom: 16px; }
+        .form-label { display: block; font-size: 12px; font-weight: 500; color: #94a3b8; margin-bottom: 6px; }
+        .form-input { 
+            width: 100%; 
+            background: #0f172a; 
+            border: 1px solid #334155; 
+            color: white; 
+            padding: 8px 12px; 
+            border-radius: 6px; 
+            font-size: 13px;
+            transition: border-color 0.15s;
+        }
+        .form-input:focus { outline: none; border-color: #3b82f6; ring: 2px solid rgba(59,130,246,0.2); }
+        
+        /* Buttons */
+        .btn {
+            width: 100%;
+            padding: 10px;
+            border-radius: 8px;
+            border: none;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-bottom: 10px;
+            font-size: 13px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 6px;
+        }
+        .btn:active { transform: scale(0.98); }
+        .btn-primary { background-color: #3b82f6; color: white; }
+        .btn-primary:hover { background-color: #2563eb; }
+        .btn-success { background-color: #10b981; color: white; }
+        .btn-success:hover { background-color: #059669; }
+        .btn-danger { background-color: #ef4444; color: white; margin-top: 16px; }
+        .btn-danger:hover { background-color: #dc2626; }
+        .btn-secondary { background-color: #334155; color: #e2e8f0; }
+        .btn-secondary:hover { background-color: #475569; color: white; }
+        .btn-info { background: linear-gradient(135deg, #6366f1, #8b5cf6); color: white; }
+        .btn-info:hover { filter: brightness(1.1); box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3); }
+        
+        /* View Buttons */
+        .btn-view {
+            background-color: transparent;
+            color: #94a3b8;
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            border: none;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-view:hover { background-color: rgba(255,255,255,0.1); color: white; }
+        .btn-view:active { background-color: rgba(255,255,255,0.2); }
+
+        .section-title {
+            font-size: 13px;
+            font-weight: 700;
+            color: #60a5fa;
+            margin-bottom: 16px;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            border-bottom: 1px solid #334155;
+            padding-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .metric-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; font-size: 13px; }
+        .metric-val { font-family: 'JetBrains Mono', monospace; color: #f1f5f9; }
+        
+        /* Lists */
+        .list-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 12px;
+            padding: 8px 10px;
+            border-radius: 6px;
+            margin-bottom: 2px;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 1px solid transparent;
+        }
+        .list-item:hover { background: rgba(255,255,255,0.05); }
+        .list-item.selected { 
+            background: rgba(59, 130, 246, 0.15); 
+            border-color: rgba(59, 130, 246, 0.4);
+        }
+        .list-item.core-item {
+            background: rgba(148, 163, 184, 0.1); 
+            border-left: 2px solid #94a3b8;
+        }
+
+        .rel-good { color: #4ade80; }
+        .rel-bad { color: #f87171; }
+        .rel-dimmed { opacity: 0.3; }
+        .rel-highlight { background: rgba(255,255,255,0.05); border-radius: 4px; }
+
+        .status-dot { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 8px; }
+        
+        #file-input { display: none; }
+    </style>
+    
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+</head>
+<body>
+
+    <div id="canvas-container"></div>
+    <div id="labels-layer" class="label-container"></div>
+    <div id="selection-box"></div>
+
+    <!-- View Controls -->
+    <div id="view-controls">
+        <button class="btn-view" onclick="window.resetUI()" title="恢复所有界面">🔄 重置界面</button>
+        <div class="w-px h-4 bg-gray-600 mx-1"></div>
+        <button class="btn-view" onclick="window.setView('south')">南 (S)</button>
+        <button class="btn-view" onclick="window.setView('north')">北 (N)</button>
+        <button class="btn-view" onclick="window.setView('east')">东 (E)</button>
+        <button class="btn-view" onclick="window.setView('west')">西 (W)</button>
+        <button class="btn-view" onclick="window.setView('top')">顶 (T)</button>
+        <div class="w-px h-4 bg-gray-600 mx-1"></div>
+        <button class="btn-view text-blue-400" id="btn-toggle-labels" onclick="window.toggleLabels()">📏 标注: 开</button>
+    </div>
+
+    <!-- Left Sidebar: Project & Stats -->
+    <div id="sidebar-left" class="sidebar left">
+        <div class="toggle-btn" onclick="toggleSidebar('left')">
+            <i class="fas fa-chevron-left transform transition-transform duration-300" id="icon-left"></i>
+        </div>
+        
+        <div class="sidebar-content">
+            <!-- Project Section -->
+            <div class="section-title"><i class="fas fa-folder-open"></i> 项目管理</div>
+            <div class="grid grid-cols-2 gap-3 mb-3">
+                <button id="btn-new-project" class="btn btn-secondary" style="margin:0">📄 新建</button>
+                <button id="btn-import-project" class="btn btn-secondary" style="margin:0">📥 导入</button>
+            </div>
+            <button id="btn-export-project" class="btn btn-success">💾 导出 (JSON)</button>
+            <button id="btn-analysis" class="btn btn-info mt-3">📊 数据分析仪表盘</button>
+            <input type="file" id="file-input" accept=".json">
+
+            <div class="sidebar-divider"></div>
+
+            <!-- Stats Section -->
+            <div class="section-title"><i class="fas fa-chart-bar"></i> 规划概览</div>
+            <div class="metric-row">
+                <span class="text-gray-400">总建筑面积</span>
+                <span class="metric-val" id="total-area">0 m²</span>
+            </div>
+            <div class="metric-row">
+                <span class="text-gray-400">总容积</span>
+                <span class="metric-val" id="total-volume">0 m³</span>
+            </div>
+            <div class="metric-row">
+                <span class="text-gray-400">科室数量</span>
+                <span class="metric-val" id="dept-count">0</span>
+            </div>
+            <div class="metric-row pt-2 border-t border-gray-700">
+                <span class="text-gray-300 font-medium">总床位数</span>
+                <span class="metric-val text-blue-400 font-bold text-base" id="total-beds">0</span>
+            </div>
+            
+            <div class="mt-6 section-title text-sm text-gray-500 border-none pb-0 normal-case tracking-normal flex justify-between items-end">
+                <span>🔗 距离监控 (平面)</span>
+                <button id="btn-sort-dist" class="text-[10px] bg-gray-800 hover:bg-gray-700 px-2 py-0.5 rounded text-gray-400 border border-gray-700 transition-all flex items-center gap-1" onclick="window.toggleSort()">
+                    <i class="fas fa-sort-amount-down"></i> 排序
+                </button>
+            </div>
+            <div id="relationship-list" class="max-h-60 overflow-y-auto mt-2 pr-1"></div>
+            <div class="text-xs text-gray-500 mt-2">
+                * 红色: > 100m (过远) | 绿色: ≤ 100m
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Sidebar: Controls & Browser -->
+    <div id="sidebar-right" class="sidebar right">
+        <div class="toggle-btn" onclick="toggleSidebar('right')">
+            <i class="fas fa-chevron-right transform transition-transform duration-300" id="icon-right"></i>
+        </div>
+
+        <div class="sidebar-content flex flex-col h-full">
+            <button id="btn-add-dept" class="btn btn-primary mb-4"><i class="fas fa-plus"></i> 添加新科室</button>
+
+            <!-- Selection Controls -->
+            <div class="section-title"><i class="fas fa-sliders-h"></i> 属性编辑</div>
+            
+            <div id="no-selection" class="text-gray-500 text-xs py-6 text-center bg-gray-800/30 rounded-lg border border-dashed border-gray-700 mb-6">
+                请选择科室以编辑属性
+            </div>
+            
+            <!-- Single Selection -->
+            <div id="selection-controls" style="display: none;" class="mb-4">
+                <div class="form-group">
+                    <label class="form-label">科室名称</label>
+                    <input type="text" id="input-name" class="form-input">
+                </div>
+                
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="form-group">
+                        <label class="form-label">颜色</label>
+                        <input type="color" id="input-color" class="form-input" style="height: 38px; padding: 2px; cursor: pointer;">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">床位数</label>
+                        <input type="number" id="input-beds" class="form-input" min="0" step="1">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="form-group">
+                        <label class="form-label">宽度 (X)</label>
+                        <input type="number" id="input-width" class="form-input" min="1">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">进深 (Z)</label>
+                        <input type="number" id="input-depth" class="form-input" min="1">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">层高 (Y)</label>
+                        <input type="number" id="input-height" class="form-input" min="1">
+                    </div>
+                     <div class="form-group">
+                        <label class="form-label">楼层 (Y)</label>
+                        <input type="number" id="input-y" class="form-input" step="1">
+                    </div>
+                </div>
+
+                <div class="mt-2 pt-3 border-t border-gray-700 mb-4">
+                    <div class="metric-row">
+                        <span class="text-gray-400">单层面积</span>
+                        <span class="metric-val" id="current-area">0 m²</span>
+                    </div>
+                </div>
+
+                <button id="btn-delete-dept" class="btn btn-danger text-xs py-2">删除科室</button>
+            </div>
+
+            <!-- Multi Selection -->
+            <div id="multi-selection-controls" style="display: none;" class="mb-4">
+                <div class="p-4 bg-blue-500/10 rounded-lg mb-4 text-center border border-blue-500/20">
+                    <div class="text-2xl font-bold text-blue-400 mb-1" id="multi-count">0</div>
+                    <div class="text-xs text-blue-200">个科室已选中</div>
+                </div>
+                <div class="flex gap-2">
+                    <button id="btn-deselect-all" class="btn btn-secondary text-xs">取消</button>
+                    <button id="btn-delete-multi" class="btn btn-danger text-xs" style="margin:0">删除选中</button>
+                </div>
+            </div>
+
+            <div class="sidebar-divider"></div>
+
+            <!-- Dept Browser -->
+            <div class="section-title"><i class="fas fa-list"></i> 科室列表</div>
+            <div id="dept-list" class="flex-1 overflow-y-auto pr-1" style="min-height: 150px;">
+                <!-- Populated via JS -->
+            </div>
+        </div>
+    </div>
+
+    <!-- ANALYSIS DASHBOARD MODAL -->
+    <div id="analysis-modal">
+        <div class="dashboard-content">
+            <button id="btn-close-analysis" class="close-btn">×</button>
+            
+            <h2 class="text-2xl font-bold mb-6 text-white border-b border-gray-700 pb-4 flex items-center gap-3">
+                <span>📊</span> 医院空间规划分析报告
+            </h2>
+            
+            <div class="grid grid-cols-2 gap-6">
+                <!-- 1. Area Distribution Pie Chart -->
+                <div class="chart-container">
+                    <h3 class="text-base font-semibold mb-4 text-blue-400 flex items-center gap-2">
+                        <span class="w-1 h-4 bg-blue-400 rounded"></span> 功能分区占比 (面积)
+                    </h3>
+                    <div class="flex justify-center py-4">
+                        <canvas id="areaPieChart" width="280" height="280"></canvas>
+                    </div>
+                    <div id="areaLegend" class="mt-4 grid grid-cols-2 gap-2 text-xs text-gray-400"></div>
+                </div>
+
+                <!-- 2. Flow Analysis Bar Chart -->
+                <div class="chart-container">
+                    <h3 class="text-base font-semibold mb-4 text-green-400 flex items-center gap-2">
+                        <span class="w-1 h-4 bg-green-400 rounded"></span> 流线距离分布 (直方图)
+                    </h3>
+                    <div class="flex justify-center items-end h-[240px] gap-6 px-4" id="flowBarChart">
+                        <!-- Bars injected by JS -->
+                    </div>
+                    <div class="flex justify-between mt-4 text-xs text-gray-500 px-4 border-t border-gray-700 pt-2">
+                        <span>高效区<br>&lt;50m</span>
+                        <span>中等区<br>50-100m</span>
+                        <span>低效区<br>&gt;100m</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 3. Detailed List -->
+            <div class="chart-container mt-0">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-base font-semibold text-purple-400 flex items-center gap-2">
+                         <span class="w-1 h-4 bg-purple-400 rounded"></span> 各科室详细指标清单
+                    </h3>
+                </div>
+                <div class="overflow-x-auto rounded-lg border border-gray-700">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>科室名称</th>
+                                <th>楼层 (Y)</th>
+                                <th>尺寸 (W x D)</th>
+                                <th>面积 (m²)</th>
+                                <th>床位 (张)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="deptTableBody">
+                            <!-- Rows injected by JS -->
+                        </tbody>
+                        <tfoot>
+                            <tr class="font-bold bg-gray-800 text-white">
+                                <td colspan="3" class="text-right">总计：</td>
+                                <td id="table-total-area" class="text-blue-400">0</td>
+                                <td id="table-total-beds" class="text-blue-400">0</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { TransformControls } from 'three/addons/controls/TransformControls.js';
+
+        // --- Sidebar Logic ---
+        window.toggleSidebar = function(side) {
+            const sidebar = document.getElementById(`sidebar-${side}`);
+            const icon = document.getElementById(`icon-${side}`);
+            
+            if (side === 'left') {
+                sidebar.classList.toggle('collapsed-left');
+                // Rotate icon logic
+                if (sidebar.classList.contains('collapsed-left')) {
+                    icon.style.transform = 'rotate(180deg)';
+                } else {
+                    icon.style.transform = 'rotate(0deg)';
+                }
+            } else {
+                sidebar.classList.toggle('collapsed-right');
+                // Rotate icon logic
+                if (sidebar.classList.contains('collapsed-right')) {
+                    icon.style.transform = 'rotate(180deg)';
+                } else {
+                    icon.style.transform = 'rotate(0deg)';
+                }
+            }
+        };
+        
+        // --- Reset UI Logic ---
+        window.resetUI = function() {
+            const left = document.getElementById('sidebar-left');
+            const right = document.getElementById('sidebar-right');
+            left.classList.remove('collapsed-left');
+            right.classList.remove('collapsed-right');
+            
+            document.getElementById('icon-left').style.transform = 'rotate(0deg)';
+            document.getElementById('icon-right').style.transform = 'rotate(0deg)';
+            
+            // Reset view too
+            window.setView('reset');
+        };
+
+        // --- Data Configuration ---
+        const initialDepartments = [
+            { id: 'emergency', name: '急诊部', color: '#ef4444', beds: 50, w: 40, h: 5, d: 30, x: -50, y: 2.5, z: 20 },
+            { id: 'imaging', name: '影像中心', color: '#3b82f6', beds: 0, w: 30, h: 5, d: 25, x: 0, y: 2.5, z: 20 },
+            { id: 'surgery', name: '手术中心', color: '#a855f7', beds: 20, w: 40, h: 6, d: 40, x: 0, y: 10, z: 0 },
+            { id: 'icu', name: 'ICU 重症', color: '#ef4444', beds: 30, w: 25, h: 5, d: 20, x: -40, y: 10, z: 0 },
+            { id: 'outpatient', name: '门诊大厅', color: '#22c55e', beds: 0, w: 60, h: 8, d: 40, x: 0, y: 4, z: 70 },
+            { id: 'pharmacy', name: '中心药房', color: '#f97316', beds: 0, w: 20, h: 5, d: 15, x: 50, y: 2.5, z: 60 },
+            { id: 'inpatient_1', name: '住院部 A', color: '#eab308', beds: 100, w: 80, h: 4, d: 20, x: 0, y: 20, z: -40 },
+            { id: 'inpatient_2', name: '住院部 B', color: '#eab308', beds: 100, w: 80, h: 4, d: 20, x: 0, y: 26, z: -40 },
+            { id: 'lab', name: '检验科', color: '#3b82f6', beds: 0, w: 25, h: 5, d: 25, x: 40, y: 2.5, z: 20 },
+        ];
+
+        // --- Scene Setup ---
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x0f172a); // Matches CSS background
+        
+        const gridHelper = new THREE.GridHelper(400, 40, 0x334155, 0x1e293b);
+        scene.add(gridHelper);
+
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        scene.add(ambientLight);
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        dirLight.position.set(100, 200, 100);
+        scene.add(dirLight);
+
+        // --- CAMERA CHANGE: ORTHOGRAPHIC ---
+        const aspect = window.innerWidth / window.innerHeight;
+        const frustumSize = 300; // Visible area size
+        const camera = new THREE.OrthographicCamera( 
+            frustumSize * aspect / - 2, 
+            frustumSize * aspect / 2, 
+            frustumSize / 2, 
+            frustumSize / - 2, 
+            1, 
+            5000 
+        );
+        
+        // Initial Axonometric-ish view
+        camera.position.set(200, 200, 200); 
+        camera.lookAt(0, 0, 0);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        container.appendChild(renderer.domElement);
+
+        const orbit = new OrbitControls(camera, renderer.domElement);
+        orbit.enableDamping = true;
+        // Key Update: Right Click Rotate, Middle Pan, Left is free for selection
+        orbit.mouseButtons = {
+            LEFT: null, // Custom handling
+            MIDDLE: THREE.MOUSE.PAN,
+            RIGHT: THREE.MOUSE.ROTATE
+        };
+        
+        const transformControl = new TransformControls(camera, renderer.domElement);
+        transformControl.addEventListener('dragging-changed', function (event) {
+            orbit.enabled = !event.value;
+        });
+        transformControl.setTranslationSnap(1); 
+        scene.add(transformControl);
+
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+
+        // --- View Navigation ---
+        // Expose function to window for button clicks
+        window.setView = function(view) {
+            const dist = 300; // Standard distance
+            let targetPos = new THREE.Vector3();
+            let targetUp = new THREE.Vector3(0, 1, 0); // Default Up
+
+            switch(view) {
+                case 'south': targetPos.set(0, 0, dist); break; // Front
+                case 'north': targetPos.set(0, 0, -dist); break; // Back
+                case 'east': targetPos.set(dist, 0, 0); break; // Right
+                case 'west': targetPos.set(-dist, 0, 0); break; // Left
+                case 'top': 
+                    targetPos.set(0, dist, 0); 
+                    // CRITICAL FIX: Set UP vector to -Z for Top view to align North to Up on screen
+                    targetUp.set(0, 0, -1); 
+                    break;
+                case 'reset':
+                    targetPos.set(200, 200, 200);
+                    break;
+            }
+
+            if (targetPos) {
+                const startPos = camera.position.clone();
+                const startUp = camera.up.clone();
+                const startZoom = camera.zoom;
+                const targetZoom = 1.0; // Reset zoom
+
+                let progress = 0;
+                
+                // Disable orbit during transition
+                orbit.enabled = false;
+
+                function animateView() {
+                    progress += 0.04;
+                    if (progress > 1) progress = 1;
+                    
+                    camera.position.lerpVectors(startPos, targetPos, progress);
+                    camera.up.lerpVectors(startUp, targetUp, progress);
+                    camera.zoom = THREE.MathUtils.lerp(startZoom, targetZoom, progress);
+                    
+                    camera.lookAt(0, 0, 0);
+                    camera.updateProjectionMatrix();
+                    
+                    if (progress < 1) {
+                        requestAnimationFrame(animateView);
+                    } else {
+                        // Ensure final exact state
+                        camera.position.copy(targetPos);
+                        camera.up.copy(targetUp);
+                        camera.zoom = targetZoom;
+                        camera.lookAt(0, 0, 0);
+                        camera.updateProjectionMatrix();
+                        
+                        orbit.target.set(0, 0, 0);
+                        orbit.update();
+                        orbit.enabled = true;
+                    }
+                }
+                animateView();
+            }
+        };
+        
+        // --- Label Toggle Logic ---
+        window.toggleLabels = function() {
+            showDistanceLabels = !showDistanceLabels;
+            const btn = document.getElementById('btn-toggle-labels');
+            if (showDistanceLabels) {
+                btn.textContent = '📏 标注: 开';
+                btn.classList.add('text-blue-400');
+                btn.classList.remove('text-gray-500');
+            } else {
+                btn.textContent = '📏 标注: 关';
+                btn.classList.remove('text-blue-400');
+                btn.classList.add('text-gray-500');
+            }
+            updateConnectionsAndGlobalStats(false); // Force re-render labels
+        };
+
+        // --- State Management ---
+        let blocks = []; 
+        let blockMap = {};
+        let connectionLines = []; 
+        let coreMeshes = []; // NEW: Array for Core (Elevator) meshes
+        const labelsLayer = document.getElementById('labels-layer');
+        let selectedBlocks = []; 
+        let selectedBlock = null; 
+        let showDistanceLabels = true; // Global flag for label visibility
+        let isSortedByDistance = false; // Sort state for relationship list
+        
+        // Selection Box State
+        const selectionBox = document.getElementById('selection-box');
+        let isSelecting = false;
+        let startSelectionCoords = { x: 0, y: 0 };
+
+        // --- Core Functions ---
+        
+        // --- Sort Toggle Logic ---
+        window.toggleSort = function() {
+            isSortedByDistance = !isSortedByDistance;
+            const btn = document.getElementById('btn-sort-dist');
+            if (isSortedByDistance) {
+                btn.classList.add('text-blue-400', 'border-blue-500/50');
+                btn.classList.remove('text-gray-400', 'border-gray-700');
+                btn.innerHTML = '<i class="fas fa-sort-amount-down"></i> 还原';
+            } else {
+                btn.classList.remove('text-blue-400', 'border-blue-500/50');
+                btn.classList.add('text-gray-400', 'border-gray-700');
+                btn.innerHTML = '<i class="fas fa-sort-amount-down"></i> 排序';
+            }
+            updateConnectionsAndGlobalStats(true);
+        };
+
+        function updateBlockLabel(block) {
+            const data = block.userData;
+            const area = (block.scale.x * block.scale.z).toFixed(0);
+            
+            if (data.labelElement) {
+                data.labelElement.innerHTML = `
+                    <span>${data.name}</span>
+                    <span class="area-tag">${area}m²</span>
+                `;
+            }
+        }
+
+        function createBlock(data) {
+            const geometry = new THREE.BoxGeometry(1, 1, 1);
+            const colorObj = new THREE.Color(data.color);
+
+            const material = new THREE.MeshStandardMaterial({
+                color: colorObj,
+                transparent: true,
+                opacity: 0.85, 
+                roughness: 0.2,
+                metalness: 0.1,
+                flatShading: false
+            });
+
+            const mesh = new THREE.Mesh(geometry, material);
+            mesh.scale.set(data.w, data.h, data.d);
+            mesh.position.set(data.x, data.y, data.z);
+            
+            // Store data
+            mesh.userData = { 
+                id: data.id,
+                name: data.name,
+                color: '#' + colorObj.getHexString(),
+                beds: data.beds || 0,
+                isCore: false
+            };
+
+            scene.add(mesh);
+            blocks.push(mesh);
+            blockMap[data.id] = mesh;
+
+            // HTML Label
+            const labelDiv = document.createElement('div');
+            labelDiv.className = 'dept-label';
+            labelDiv.id = `label-${data.id}`;
+            labelsLayer.appendChild(labelDiv);
+            mesh.userData.labelElement = labelDiv;
+            
+            // Initialize Label Content with Area
+            updateBlockLabel(mesh);
+
+            return mesh;
+        }
+
+        // --- NEW: Function to Create Core Meshes ---
+        function updateCoreMeshes() {
+             // 1. Clear existing cores
+             coreMeshes.forEach(mesh => {
+                 scene.remove(mesh);
+                 mesh.geometry.dispose();
+                 mesh.material.dispose();
+             });
+             coreMeshes = [];
+             
+             // 2. Collect all vertical segments
+             const segments = [];
+             connectionLines.forEach(conn => {
+                 const startPos = conn.fromMesh.position;
+                 const endPos = conn.toMesh.position;
+                 
+                 // Vertical segment is at Target X,Z
+                 const x = endPos.x;
+                 const z = endPos.z;
+                 const minY = Math.min(startPos.y, endPos.y);
+                 const maxY = Math.max(startPos.y, endPos.y);
+                 
+                 // Only consider significant vertical drops (> 1m)
+                 if (maxY - minY > 1) {
+                     segments.push({ x, z, min: minY, max: maxY });
+                 }
+             });
+
+             // 3. Group segments by spatial location (X, Z)
+             // Use integer keys to group overlapping shafts
+             const groups = {};
+             segments.forEach(seg => {
+                 const key = `${Math.round(seg.x)},${Math.round(seg.z)}`;
+                 if (!groups[key]) groups[key] = [];
+                 groups[key].push(seg);
+             });
+
+             // 4. Merge overlapping intervals & Create Meshes
+             Object.values(groups).forEach(groupSegs => {
+                 // Sort by bottom height
+                 groupSegs.sort((a, b) => a.min - b.min);
+                 
+                 const merged = [];
+                 if (groupSegs.length > 0) {
+                     let current = groupSegs[0];
+                     
+                     for (let i = 1; i < groupSegs.length; i++) {
+                         const next = groupSegs[i];
+                         // Check for overlap or adjacency (with small buffer)
+                         if (next.min <= current.max + 0.5) {
+                             // Merge: extend current max to cover next
+                             current.max = Math.max(current.max, next.max);
+                         } else {
+                             // No overlap, push current and start new
+                             merged.push(current);
+                             current = next;
+                         }
+                     }
+                     merged.push(current);
+                 }
+
+                 // Generate meshes for merged intervals
+                 merged.forEach(seg => {
+                     const height = seg.max - seg.min;
+                     const midY = seg.min + height / 2;
+                     
+                     // Create Core Block
+                     const geometry = new THREE.BoxGeometry(4, height + 2, 4); // Slightly thicker and taller to look structural
+                     const material = new THREE.MeshStandardMaterial({
+                         color: 0x94a3b8, // Slate-400
+                         transparent: true,
+                         opacity: 0.6,
+                         roughness: 0.5
+                     });
+                     
+                     const core = new THREE.Mesh(geometry, material);
+                     core.position.set(seg.x, midY, seg.z);
+                     core.userData = { 
+                         id: 'core_' + coreMeshes.length,
+                         name: '交通核',
+                         color: '#94a3b8',
+                         beds: 0,
+                         isCore: true
+                     };
+                     
+                     scene.add(core);
+                     coreMeshes.push(core);
+                 });
+             });
+             
+             // Refresh browser to show cores
+             updateDepartmentBrowser();
+        }
+
+
+        function addConnection(meshA, meshB) {
+            const id1 = meshA.userData.id < meshB.userData.id ? meshA.userData.id : meshB.userData.id;
+            const id2 = meshA.userData.id < meshB.userData.id ? meshB.userData.id : meshA.userData.id;
+            const key = `${id1}-${id2}`;
+
+            if (connectionLines.some(c => c.key === key)) return;
+
+            // 4 points for Manhattan path
+            const points = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
+            const geometry = new THREE.BufferGeometry().setFromPoints(points);
+            
+            const material = new THREE.LineDashedMaterial({
+                color: 0xffffff,
+                dashSize: 2, gapSize: 1, opacity: 0.4, transparent: true, depthTest: false
+            });
+            const line = new THREE.Line(geometry, material);
+            scene.add(line);
+            
+            const labelDiv = document.createElement('div');
+            labelDiv.className = 'distance-label';
+            labelDiv.textContent = '0m';
+            labelsLayer.appendChild(labelDiv);
+
+            connectionLines.push({
+                key: key,
+                mesh: line,
+                fromMesh: meshA,
+                toMesh: meshB,
+                labelEl: labelDiv
+            });
+        }
+
+        function regenerateAllConnections() {
+            connectionLines.forEach(c => {
+                scene.remove(c.mesh);
+                c.mesh.geometry.dispose();
+                c.mesh.material.dispose();
+                if (c.labelEl) c.labelEl.remove();
+            });
+            connectionLines = [];
+
+            for (let i = 0; i < blocks.length; i++) {
+                for (let j = i + 1; j < blocks.length; j++) {
+                    addConnection(blocks[i], blocks[j]);
+                }
+            }
+        }
+
+        function createNewDepartment() {
+            const id = 'custom_' + Date.now();
+            const colors = ['#f472b6', '#a78bfa', '#34d399', '#fbbf24', '#60a5fa'];
+            const randomColor = colors[Math.floor(Math.random() * colors.length)];
+            
+            const newDept = {
+                id: id,
+                name: '新建科室',
+                color: randomColor,
+                beds: 0,
+                w: 20, h: 4, d: 20,
+                x: 0, y: 15, z: 0 
+            };
+
+            const newMesh = createBlock(newDept);
+            
+            // Connect to existing
+            blocks.forEach(existingMesh => {
+                if (existingMesh !== newMesh) addConnection(newMesh, existingMesh);
+            });
+
+            deselectAll();
+            selectBlock(newMesh);
+            updateConnectionsAndGlobalStats(true); 
+        }
+
+        function deleteSelectedDepartments() {
+            if (selectedBlocks.length === 0) return;
+            const toDelete = [...selectedBlocks];
+            deselectAll();
+
+            toDelete.forEach(blockToDelete => {
+                scene.remove(blockToDelete);
+                if (blockToDelete.userData.labelElement) blockToDelete.userData.labelElement.remove();
+                
+                blocks = blocks.filter(b => b !== blockToDelete);
+                delete blockMap[blockToDelete.userData.id];
+
+                // Remove related connections
+                const connectionsToRemove = connectionLines.filter(c => c.fromMesh === blockToDelete || c.toMesh === blockToDelete);
+                connectionsToRemove.forEach(c => {
+                    scene.remove(c.mesh);
+                    c.mesh.geometry.dispose();
+                    c.mesh.material.dispose();
+                    c.labelEl.remove();
+                });
+                connectionLines = connectionLines.filter(c => c.fromMesh !== blockToDelete && c.toMesh !== blockToDelete);
+
+                blockToDelete.geometry.dispose();
+                blockToDelete.material.dispose();
+            });
+
+            updateConnectionsAndGlobalStats(true);
+        }
+
+        function resetProject() {
+            deselectAll();
+            
+            [...blocks].forEach(b => {
+                scene.remove(b);
+                if (b.userData.labelElement) b.userData.labelElement.remove();
+                b.geometry.dispose();
+                b.material.dispose();
+            });
+            blocks = [];
+            blockMap = {};
+
+            connectionLines.forEach(c => {
+                scene.remove(c.mesh);
+                if (c.labelEl) c.labelEl.remove();
+                c.mesh.geometry.dispose();
+                c.mesh.material.dispose();
+            });
+            connectionLines = [];
+            
+            // Clear cores too
+            coreMeshes.forEach(mesh => {
+                 scene.remove(mesh);
+                 mesh.geometry.dispose();
+                 mesh.material.dispose();
+            });
+            coreMeshes = [];
+
+            updateConnectionsAndGlobalStats(true);
+        }
+
+        // --- DASHBOARD LOGIC ---
+        const analysisModal = document.getElementById('analysis-modal');
+        const btnCloseAnalysis = document.getElementById('btn-close-analysis');
+        
+        function openAnalysisModal() {
+            analysisModal.style.display = 'flex';
+            renderPieChart();
+            renderFlowChart();
+            renderTable();
+        }
+
+        function closeAnalysisModal() {
+            analysisModal.style.display = 'none';
+        }
+
+        btnCloseAnalysis.addEventListener('click', closeAnalysisModal);
+        
+        // Close on click outside content
+        window.addEventListener('click', (e) => {
+            if (e.target === analysisModal) {
+                closeAnalysisModal();
+            }
+        });
+
+        function renderPieChart() {
+            const canvas = document.getElementById('areaPieChart');
+            const ctx = canvas.getContext('2d');
+            const legendDiv = document.getElementById('areaLegend');
+            
+            // Clear
+            ctx.clearRect(0,0,canvas.width, canvas.height);
+            legendDiv.innerHTML = '';
+
+            let totalArea = 0;
+            const data = blocks.map(b => {
+                const area = b.scale.x * b.scale.z;
+                totalArea += area;
+                return { 
+                    name: b.userData.name, 
+                    value: area, 
+                    color: b.userData.color 
+                };
+            });
+            
+            // Sort by size
+            data.sort((a,b) => b.value - a.value);
+
+            // Draw
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+            const radius = 100;
+            let startAngle = 0;
+
+            data.forEach(item => {
+                const sliceAngle = (item.value / totalArea) * 2 * Math.PI;
+                
+                // Draw slice
+                ctx.beginPath();
+                ctx.moveTo(centerX, centerY);
+                ctx.arc(centerX, centerY, radius, startAngle, startAngle + sliceAngle);
+                ctx.closePath();
+                ctx.fillStyle = item.color;
+                ctx.fill();
+                ctx.strokeStyle = '#1e293b';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                
+                // Legend
+                const percent = ((item.value / totalArea) * 100).toFixed(1) + '%';
+                legendDiv.innerHTML += `
+                    <div class="flex items-center">
+                        <span class="w-3 h-3 rounded-full mr-2" style="background:${item.color}"></span>
+                        <span class="truncate flex-1">${item.name}</span>
+                        <span class="font-mono text-gray-300 ml-2">${percent}</span>
+                    </div>
+                `;
+
+                startAngle += sliceAngle;
+            });
+            
+            // Hollow center (Donut)
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, 60, 0, 2 * Math.PI);
+            ctx.fillStyle = '#1e293b';
+            ctx.fill();
+            
+            // Center Text
+            ctx.fillStyle = 'white';
+            ctx.font = 'bold 16px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('总面积', centerX, centerY - 10);
+            ctx.font = '14px Arial';
+            ctx.fillStyle = '#94a3b8';
+            ctx.fillText(totalArea.toFixed(0) + "m²", centerX, centerY + 15);
+        }
+
+        function renderFlowChart() {
+            const container = document.getElementById('flowBarChart');
+            container.innerHTML = '';
+            
+            const buckets = { good: 0, mid: 0, bad: 0 };
+            
+            connectionLines.forEach(conn => {
+                const startPos = conn.fromMesh.position;
+                const endPos = conn.toMesh.position;
+                // Planar Manhattan
+                const dist = Math.abs(startPos.x - endPos.x) + Math.abs(startPos.z - endPos.z);
+                
+                if (dist <= 50) buckets.good++;
+                else if (dist <= 100) buckets.mid++;
+                else buckets.bad++;
+            });
+            
+            const maxVal = Math.max(buckets.good, buckets.mid, buckets.bad, 1);
+            
+            const createBar = (val, color, label) => {
+                const height = Math.max((val / maxVal) * 100, 4); // Min height
+                return `
+                    <div class="flex flex-col items-center flex-1 h-full justify-end group relative">
+                        <div class="absolute bottom-full mb-2 text-white bg-gray-700 px-2 py-1 rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">${val}条连线</div>
+                        <div class="w-full ${color} rounded-t transition-all duration-500 hover:brightness-110 cursor-pointer" style="height: ${height}%"></div>
+                    </div>
+                `;
+            };
+            
+            container.innerHTML += createBar(buckets.good, 'bg-green-500', '高效');
+            container.innerHTML += createBar(buckets.mid, 'bg-yellow-500', '中等');
+            container.innerHTML += createBar(buckets.bad, 'bg-red-500', '低效');
+        }
+
+        function renderTable() {
+            const tbody = document.getElementById('deptTableBody');
+            tbody.innerHTML = '';
+            
+            let tArea = 0;
+            let tBeds = 0;
+            
+            // Clone and sort by name
+            const sortedBlocks = [...blocks].sort((a,b) => a.userData.name.localeCompare(b.userData.name));
+
+            sortedBlocks.forEach(b => {
+                const area = b.scale.x * b.scale.z;
+                const beds = parseInt(b.userData.beds) || 0;
+                tArea += area;
+                tBeds += beds;
+                
+                const row = `
+                    <tr>
+                        <td class="font-semibold text-white">
+                            <span class="w-2.5 h-2.5 inline-block rounded-full mr-2 shadow-sm" style="background:${b.userData.color}"></span>
+                            ${b.userData.name}
+                        </td>
+                        <td class="text-gray-400 font-mono">${Math.round(b.position.y)}</td>
+                        <td class="text-gray-400 font-mono">${b.scale.x} x ${b.scale.z}</td>
+                        <td class="text-gray-200 font-mono">${area.toFixed(0)}</td>
+                        <td class="text-gray-200 font-mono">${beds}</td>
+                    </tr>
+                `;
+                tbody.innerHTML += row;
+            });
+            
+            document.getElementById('table-total-area').innerText = tArea.toFixed(0);
+            document.getElementById('table-total-beds').innerText = tBeds;
+        }
+
+        // --- Browser & Stats Update ---
+        const deptListContainer = document.getElementById('dept-list');
+
+        function updateDepartmentBrowser() {
+            deptListContainer.innerHTML = '';
+            
+            // Sort list alphabetically
+            const sorted = [...blocks].sort((a,b) => a.userData.name.localeCompare(b.userData.name));
+            
+            // Add Normal Depts
+            sorted.forEach(block => {
+                const item = document.createElement('div');
+                item.className = 'list-item';
+                if (selectedBlocks.includes(block)) item.classList.add('selected');
+                
+                item.innerHTML = `
+                    <div class="flex items-center">
+                        <span class="status-dot" style="background-color: ${block.userData.color}"></span>
+                        <span class="font-medium">${block.userData.name}</span>
+                    </div>
+                    <span class="text-gray-500 text-xs font-mono">${block.userData.beds}床</span>
+                `;
+                
+                item.addEventListener('click', (e) => {
+                    e.stopPropagation(); // prevent scene click
+                    deselectAll();
+                    selectBlock(block);
+                });
+                
+                deptListContainer.appendChild(item);
+            });
+
+            // Add Cores (Grey items)
+            if (coreMeshes.length > 0) {
+                const separator = document.createElement('div');
+                separator.className = 'text-xs text-gray-500 mt-2 mb-1 px-2';
+                separator.innerText = '垂直交通设施';
+                deptListContainer.appendChild(separator);
+
+                coreMeshes.forEach(core => {
+                     const item = document.createElement('div');
+                     item.className = 'list-item core-item'; // Special class
+                     item.innerHTML = `
+                        <div class="flex items-center">
+                            <span class="status-dot" style="background-color: #94a3b8"></span>
+                            <span class="font-medium text-gray-400">交通核</span>
+                        </div>
+                        <span class="text-gray-600 text-xs font-mono">Core</span>
+                     `;
+                     // Optional: Allow selecting cores? Currently visual only
+                     deptListContainer.appendChild(item);
+                });
+            }
+        }
+
+        // --- Main Stats Update Logic ---
+        function updateConnectionsAndGlobalStats(forceUpdateList) {
+            let totalArea = 0;
+            let totalVol = 0;
+            let totalBeds = 0;
+
+            blocks.forEach(b => {
+                totalArea += b.scale.x * b.scale.z;
+                totalVol += b.scale.x * b.scale.y * b.scale.z;
+                totalBeds += (parseInt(b.userData.beds) || 0);
+            });
+            document.getElementById('total-area').textContent = totalArea.toFixed(0) + " m²";
+            document.getElementById('total-volume').textContent = totalVol.toFixed(0) + " m³";
+            document.getElementById('dept-count').textContent = blocks.length;
+            document.getElementById('total-beds').textContent = totalBeds;
+
+            // Re-render browser list if force update (e.g. selection change or data change)
+            if (forceUpdateList) {
+                updateCoreMeshes(); // This will also update browser
+            }
+
+            // Connection Lines Logic
+            const relListContainer = document.getElementById('relationship-list');
+            const shouldUpdateList = forceUpdateList || (frameCounter % 15 === 0);
+            // 1. Update 3D Lines & Collect Data
+            const listItems = [];
+
+            connectionLines.forEach(conn => {
+                const startPos = conn.fromMesh.position.clone();
+                const endPos = conn.toMesh.position.clone();
+
+                // Manhattan path
+                const p1 = new THREE.Vector3(endPos.x, startPos.y, startPos.z);
+                const p2 = new THREE.Vector3(endPos.x, startPos.y, endPos.z);
+                const p3 = endPos;
+
+                const positions = new Float32Array([
+                    startPos.x, startPos.y, startPos.z,
+                    p1.x, p1.y, p1.z,
+                    p2.x, p2.y, p2.z,
+                    p3.x, p3.y, p3.z
+                ]);
+                
+                conn.mesh.geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+                conn.mesh.computeLineDistances(); 
+
+                const dist = Math.abs(startPos.x - endPos.x) + Math.abs(startPos.z - endPos.z);
+                const dx = Math.abs(startPos.x - endPos.x);
+                const dz = Math.abs(startPos.z - endPos.z);
+                const turns = (dx > 1 && dz > 1) ? 1 : 0;
+                             
+                const threshold = 100; 
+                const isTooFar = dist > threshold;
+                // const baseColor = isTooFar ? 0xf87171 : 0x4ade80; // Not used as we use strings
+
+                let opacity = 0.4;
+                let colorVal = isTooFar ? '#ef4444' : '#22c55e'; // Tailwind red-500 : green-500
+                
+                // Visibility Logic
+                let isVisible = showDistanceLabels; 
+
+                if (selectedBlocks.length > 0) {
+                    const isConnected = selectedBlocks.some(sb => conn.fromMesh === sb || conn.toMesh === sb);
+                    if (isConnected) {
+                        opacity = 1.0; 
+                        conn.labelEl.style.opacity = '1';
+                        conn.labelEl.style.zIndex = '100';
+                        conn.labelEl.style.fontWeight = 'bold';
+                        conn.labelEl.style.border = '1px solid #333';
+                        isVisible = true; // Always show if connected to selection
+                    } else {
+                        opacity = 0.05; 
+                        conn.labelEl.style.opacity = '0.1';
+                        conn.labelEl.style.zIndex = '1';
+                        conn.labelEl.style.fontWeight = 'normal';
+                        conn.labelEl.style.border = 'none';
+                        // Keep global setting if not selected, but dimmed
+                    }
+                } else {
+                    opacity = 0.4;
+                    conn.labelEl.style.opacity = '1';
+                    conn.labelEl.style.zIndex = '5';
+                    conn.labelEl.style.fontWeight = 'normal';
+                    conn.labelEl.style.border = '1px solid #ccc';
+                }
+
+                // Use .set() string for color
+                conn.mesh.material.color.set(colorVal);
+                conn.mesh.material.opacity = isVisible ? opacity : (selectedBlocks.length > 0 ? opacity : 0.1); // Make lines faint if labels off
+
+                const midPoint = new THREE.Vector3().addVectors(startPos, endPos).multiplyScalar(0.5);
+                midPoint.project(camera);
+                
+                const lx = (midPoint.x * .5 + .5) * window.innerWidth;
+                const ly = (midPoint.y * -.5 + .5) * window.innerHeight;
+                
+                conn.labelEl.style.left = `${lx}px`;
+                conn.labelEl.style.top = `${ly}px`;
+                conn.labelEl.textContent = `${dist.toFixed(0)}m / ${turns}转`; 
+                conn.labelEl.style.color = isTooFar ? '#ef4444' : '#22c55e'; 
+                
+                // Final Visibility Check
+                if (!isVisible) {
+                    conn.labelEl.style.display = 'none';
+                    // If labels are off globally, make lines very faint unless selected
+                    if (selectedBlocks.length === 0) conn.mesh.material.opacity = 0.1;
+                } else {
+                    conn.labelEl.style.display = (midPoint.z > 1) ? 'none' : 'flex';
+                }
+
+                // Collect list data
+                listItems.push({
+                    conn: conn,
+                    dist: dist,
+                    turns: turns,
+                    isTooFar: isTooFar,
+                    n1: conn.fromMesh.userData.name.replace('中心','').replace('部','').replace('大厅',''),
+                    n2: conn.toMesh.userData.name.replace('中心','').replace('部','').replace('大厅','')
+                });
+            });
+
+            // 2. Sort if needed
+            if (isSortedByDistance) {
+                listItems.sort((a, b) => b.dist - a.dist);
+            }
+
+            // 3. Generate HTML
+            if (shouldUpdateList) {
+                let listHTML = '';
+                listItems.forEach(item => {
+                    const statusClass = item.isTooFar ? 'rel-bad' : 'rel-good';
+                    
+                    let listClass = 'list-item'; // Re-use list styling
+                    if (selectedBlocks.length > 0) {
+                         const isConnected = selectedBlocks.some(sb => item.conn.fromMesh === sb || item.conn.toMesh === sb);
+                        if (!isConnected) listClass += ' rel-dimmed';
+                        else listClass += ' rel-highlight';
+                    }
+
+                    listHTML += `
+                        <div class="${listClass} cursor-default hover:bg-transparent">
+                            <span class="truncate pr-2 w-24 text-gray-300" title="${item.n1}-${item.n2}">${item.n1}-${item.n2}</span>
+                            <span class="${statusClass} flex-1 text-right font-mono">
+                                ${item.dist.toFixed(0)}m <span class="text-gray-500 text-[10px]">(${item.turns}转)</span>
+                            </span>
+                        </div>
+                    `;
+                });
+                relListContainer.innerHTML = listHTML;
+            }
+        }
+
+        // --- Interaction Logic ---
+        const uiName = document.getElementById('input-name');
+        const uiColor = document.getElementById('input-color');
+        const uiBeds = document.getElementById('input-beds');
+        const uiWidth = document.getElementById('input-width');
+        const uiDepth = document.getElementById('input-depth');
+        const uiHeight = document.getElementById('input-height');
+        const uiY = document.getElementById('input-y');
+        
+        const uiStatsPanel = document.getElementById('selection-controls');
+        const uiMultiStatsPanel = document.getElementById('multi-selection-controls');
+        const uiNoSelect = document.getElementById('no-selection');
+        const uiMultiCount = document.getElementById('multi-count');
+        
+        const btnAdd = document.getElementById('btn-add-dept');
+        const btnDelete = document.getElementById('btn-delete-dept');
+        const btnDeleteMulti = document.getElementById('btn-delete-multi');
+        const btnDeselectAll = document.getElementById('btn-deselect-all');
+        const btnNewProj = document.getElementById('btn-new-project');
+        const btnExport = document.getElementById('btn-export-project');
+        const btnImport = document.getElementById('btn-import-project');
+        const btnAnalysis = document.getElementById('btn-analysis');
+        const fileInput = document.getElementById('file-input');
+
+        btnAdd.addEventListener('click', createNewDepartment);
+        btnDelete.addEventListener('click', deleteSelectedDepartments);
+        btnDeleteMulti.addEventListener('click', deleteSelectedDepartments);
+        btnDeselectAll.addEventListener('click', deselectAll);
+        btnAnalysis.addEventListener('click', openAnalysisModal);
+        
+        // Fixed New Project Logic
+        btnNewProj.addEventListener('click', () => {
+            if(confirm("您是否已保存当前项目？\n\n点击“确定”将清空当前所有内容并新建空白项目。")) {
+                resetProject();
+            }
+        });
+
+        // Export/Import
+        btnExport.addEventListener('click', () => {
+            const projectData = {
+                meta: { version: "1.1", appName: "HospitalCAD", createdAt: new Date().toISOString() },
+                project: {
+                    name: "医院空间规划项目",
+                    departments: blocks.map(b => ({
+                        id: b.userData.id,
+                        name: b.userData.name,
+                        color: b.userData.color,
+                        beds: b.userData.beds,
+                        dimensions: { width: b.scale.x, height: b.scale.y, depth: b.scale.z },
+                        position: { x: b.position.x, y: b.position.y, z: b.position.z }
+                    }))
+                }
+            };
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(projectData, null, 2));
+            const downloadAnchorNode = document.createElement('a');
+            downloadAnchorNode.setAttribute("href", dataStr);
+            downloadAnchorNode.setAttribute("download", "hospital_project.json");
+            document.body.appendChild(downloadAnchorNode);
+            downloadAnchorNode.click();
+            downloadAnchorNode.remove();
+        });
+
+        btnImport.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const json = JSON.parse(e.target.result);
+                    if (!json.project || !json.project.departments) { alert("无效的项目文件"); return; }
+                    resetProject();
+                    json.project.departments.forEach(dept => {
+                        createBlock({
+                            id: dept.id, name: dept.name, color: dept.color, beds: dept.beds,
+                            w: dept.dimensions.width, h: dept.dimensions.height, d: dept.dimensions.depth,
+                            x: dept.position.x, y: dept.position.y, z: dept.position.z
+                        });
+                    });
+                    regenerateAllConnections();
+                    updateConnectionsAndGlobalStats(true);
+                } catch (error) { alert("导入失败"); }
+                event.target.value = '';
+            };
+            reader.readAsText(file);
+        });
+
+        function onWindowResize() {
+            const newAspect = window.innerWidth / window.innerHeight;
+            // Update Ortho Camera
+            camera.left = - frustumSize * newAspect / 2;
+            camera.right = frustumSize * newAspect / 2;
+            camera.top = frustumSize / 2;
+            camera.bottom = - frustumSize / 2;
+            
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+        window.addEventListener('resize', onWindowResize);
+
+        // --- SELECTION LOGIC ---
+
+        function onPointerDown(event) {
+            // Filter clicks on UI
+            if (event.target !== renderer.domElement) return;
+            if (transformControl.dragging) return;
+
+            // Left Click (0) is for selection/box
+            if (event.button !== 0) return; 
+
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(blocks);
+
+            if (intersects.length > 0) {
+                const object = intersects[0].object;
+                if (!selectedBlocks.includes(object)) {
+                    deselectAll();
+                    selectBlock(object);
+                }
+            } else {
+                isSelecting = true;
+                orbit.enabled = false;
+                startSelectionCoords.x = event.clientX;
+                startSelectionCoords.y = event.clientY;
+                
+                selectionBox.style.display = 'block';
+                selectionBox.style.width = '0px';
+                selectionBox.style.height = '0px';
+                selectionBox.style.left = event.clientX + 'px';
+                selectionBox.style.top = event.clientY + 'px';
+                selectionBox.className = ''; 
+            }
+        }
+
+        function onPointerMove(event) {
+            if (isSelecting) {
+                const currentX = event.clientX;
+                const currentY = event.clientY;
+                
+                const width = Math.abs(currentX - startSelectionCoords.x);
+                const height = Math.abs(currentY - startSelectionCoords.y);
+                const left = Math.min(currentX, startSelectionCoords.x);
+                const top = Math.min(currentY, startSelectionCoords.y);
+
+                selectionBox.style.width = width + 'px';
+                selectionBox.style.height = height + 'px';
+                selectionBox.style.left = left + 'px';
+                selectionBox.style.top = top + 'px';
+
+                if (currentX > startSelectionCoords.x) {
+                    selectionBox.className = 'selection-mode-window';
+                } else {
+                    selectionBox.className = 'selection-mode-crossing';
+                }
+            }
+        }
+
+        function onPointerUp(event) {
+            if (isSelecting) {
+                isSelecting = false;
+                selectionBox.style.display = 'none';
+                orbit.enabled = true; 
+
+                const endX = event.clientX;
+                const endY = event.clientY;
+                
+                if (Math.abs(endX - startSelectionCoords.x) < 5 && Math.abs(endY - startSelectionCoords.y) < 5) {
+                    deselectAll();
+                    return;
+                }
+                performBoxSelection(startSelectionCoords.x, startSelectionCoords.y, endX, endY);
+            }
+        }
+
+        window.addEventListener('pointerdown', onPointerDown);
+        window.addEventListener('pointermove', onPointerMove);
+        window.addEventListener('pointerup', onPointerUp);
+
+        function performBoxSelection(startX, startY, endX, endY) {
+            const isWindowSelection = endX > startX; 
+            const minX = Math.min(startX, endX);
+            const maxX = Math.max(startX, endX);
+            const minY = Math.min(startY, endY);
+            const maxY = Math.max(startY, endY);
+
+            const newSelection = [];
+
+            blocks.forEach(mesh => {
+                const corners = getProjectedCorners(mesh);
+                let insideCount = 0;
+                corners.forEach(p => {
+                    if (p.x >= minX && p.x <= maxX && p.y >= minY && p.y <= maxY) insideCount++;
+                });
+
+                if (isWindowSelection) {
+                    if (insideCount === 8) newSelection.push(mesh);
+                } else {
+                    if (insideCount > 0) newSelection.push(mesh);
+                    else {
+                        const center = mesh.position.clone().project(camera);
+                        const cx = (center.x * 0.5 + 0.5) * window.innerWidth;
+                        const cy = (-(center.y) * 0.5 + 0.5) * window.innerHeight;
+                        if (cx >= minX && cx <= maxX && cy >= minY && cy <= maxY) newSelection.push(mesh);
+                    }
+                }
+            });
+
+            deselectAll(); 
+            newSelection.forEach(mesh => selectBlock(mesh, true)); 
+            updateConnectionsAndGlobalStats(true);
+        }
+
+        function getProjectedCorners(mesh) {
+            const corners = [];
+            const halfW = mesh.scale.x / 2;
+            const halfH = mesh.scale.y / 2;
+            const halfD = mesh.scale.z / 2;
+            const localVerts = [
+                new THREE.Vector3(halfW, halfH, halfD), new THREE.Vector3(halfW, halfH, -halfD),
+                new THREE.Vector3(halfW, -halfH, halfD), new THREE.Vector3(halfW, -halfH, -halfD),
+                new THREE.Vector3(-halfW, halfH, halfD), new THREE.Vector3(-halfW, halfH, -halfD),
+                new THREE.Vector3(-halfW, -halfH, halfD), new THREE.Vector3(-halfW, -halfH, -halfD)
+            ];
+            localVerts.forEach(v => {
+                v.applyMatrix4(mesh.matrixWorld);
+                v.project(camera);
+                corners.push({
+                    x: (v.x * 0.5 + 0.5) * window.innerWidth,
+                    y: (-(v.y) * 0.5 + 0.5) * window.innerHeight
+                });
+            });
+            return corners;
+        }
+
+        function selectBlock(mesh, isMulti = false) {
+            if (!selectedBlocks.includes(mesh)) {
+                selectedBlocks.push(mesh);
+                if (mesh.material) mesh.material.emissive.setHex(0x666666);
+            }
+
+            if (selectedBlocks.length === 1) {
+                selectedBlock = selectedBlocks[0]; 
+                transformControl.attach(mesh);
+                uiNoSelect.style.display = 'none';
+                uiMultiStatsPanel.style.display = 'none';
+                uiStatsPanel.style.display = 'block';
+                updateUIFromSelection();
+            } else {
+                selectedBlock = null;
+                transformControl.detach();
+                uiNoSelect.style.display = 'none';
+                uiStatsPanel.style.display = 'none';
+                uiMultiStatsPanel.style.display = 'block';
+                uiMultiCount.textContent = selectedBlocks.length;
+            }
+            updateDepartmentBrowser(); // Update selection highlight in list
+        }
+
+        function deselectAll() {
+            selectedBlocks.forEach(mesh => {
+                if (mesh.material) mesh.material.emissive.setHex(0x000000);
+            });
+            selectedBlocks = [];
+            selectedBlock = null;
+            transformControl.detach();
+            uiNoSelect.style.display = 'block';
+            uiStatsPanel.style.display = 'none';
+            uiMultiStatsPanel.style.display = 'none';
+            updateConnectionsAndGlobalStats(true);
+        }
+
+        function updateUIFromSelection() {
+            if (selectedBlocks.length !== 1) return;
+            const block = selectedBlocks[0];
+            const data = block.userData;
+            
+            uiName.value = data.name;
+            uiColor.value = data.color;
+            uiBeds.value = data.beds;
+            uiWidth.value = block.scale.x;
+            uiHeight.value = block.scale.y;
+            uiDepth.value = block.scale.z;
+            uiY.value = Math.round(block.position.y);
+            
+            updateComputedMetrics();
+        }
+
+        function updateComputedMetrics() {
+            if (selectedBlocks.length !== 1) return;
+            const block = selectedBlocks[0];
+            const w = block.scale.x;
+            const d = block.scale.z;
+            document.getElementById('current-area').textContent = `${(w * d).toFixed(0)} m²`;
+        }
+
+        function updateObjectFromUI() {
+            if (selectedBlocks.length !== 1) return;
+            const block = selectedBlocks[0];
+            
+            block.userData.name = uiName.value;
+            // Removed direct textContent update, now using updateBlockLabel
+            
+            const newColor = uiColor.value;
+            block.material.color.set(newColor);
+            block.userData.color = newColor;
+
+            block.userData.beds = parseInt(uiBeds.value) || 0;
+
+            const w = parseFloat(uiWidth.value) || 1;
+            const h = parseFloat(uiHeight.value) || 1;
+            const d = parseFloat(uiDepth.value) || 1;
+            const y = parseFloat(uiY.value) || 0;
+
+            block.scale.set(w, h, d);
+            block.position.setY(y);
+
+            updateBlockLabel(block); // Updates label with new name/area
+            updateComputedMetrics();
+            updateConnectionsAndGlobalStats(true); // Update connections and list including beds
+        }
+
+        [uiName, uiColor, uiBeds, uiWidth, uiDepth, uiHeight, uiY].forEach(el => {
+            el.addEventListener('input', updateObjectFromUI);
+        });
+
+        transformControl.addEventListener('change', () => {
+             if (selectedBlocks.length === 1) {
+                 const block = selectedBlocks[0];
+                 if(document.activeElement !== uiY) {
+                     uiY.value = Math.round(block.position.y);
+                 }
+                 updateBlockLabel(block); // Update label area while dragging scale? (TransformControl does scale too if mode changed, but here usually translate. If scale mode added later, this covers it)
+                 updateConnectionsAndGlobalStats(false);
+             }
+        });
+
+        function updateScreenLabels() {
+            blocks.forEach(mesh => {
+                const label = mesh.userData.labelElement;
+                if (!label) return;
+
+                const center = mesh.position.clone();
+                center.y += (mesh.scale.y / 2) + 2; 
+                center.project(camera);
+                
+                const x = (center.x * .5 + .5) * window.innerWidth;
+                const y = (center.y * -.5 + .5) * window.innerHeight;
+
+                if (center.z > 1) {
+                    label.style.display = 'none';
+                } else {
+                    label.style.display = 'flex'; // Changed to flex to align name/area
+                    label.style.left = `${x}px`;
+                    label.style.top = `${y}px`;
+                }
+            });
+        }
+
+        // Initialize
+        initialDepartments.forEach(data => createBlock(data));
+        regenerateAllConnections(); 
+        updateConnectionsAndGlobalStats(true);
+
+        let frameCounter = 0;
+
+        function animate() {
+            requestAnimationFrame(animate);
+            frameCounter++;
+            orbit.update();
+            updateScreenLabels();
+            updateConnectionsAndGlobalStats(false);
+            renderer.render(scene, camera);
+        }
+        animate();
+    </script>
+</body>
+</html>
